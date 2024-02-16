@@ -2,6 +2,7 @@
 #include <DFRobot_I2C_Multiplexer.h>
 #include <DFRobot_AHT20.h>
 #include <DFRobot_RGBLCD1602.h>
+#include <GravityRtc.h>
 #include <string.h>
 
 #define AHT20_COUNT 2
@@ -32,6 +33,7 @@
 DFRobot_I2C_Multiplexer I2CMulti(&Wire, 0x70);
 DFRobot_AHT20 aht20[AHT20_COUNT];
 DFRobot_RGBLCD1602 lcd(0x2D, 16, 2);
+GravityRtc rtc;
 Logger logger(512);
 
 bool builtInLedState = false;
@@ -44,13 +46,12 @@ void setup()
 
   pinMode(LED_BUILTIN, OUTPUT);
 
-   // LCD related
+  // LCD related
   DEBUG_PRINT("LCD initialization... ");
 
   I2CMulti.selectPort(MUX_LCD);
   lcd.init();
   lcd.setRGB(20, 20, 20);
-
   lcd.setCursor(0, 0);
   lcd.print("Starting...");
   lcd.setCursor(0, 1);
@@ -62,12 +63,13 @@ void setup()
   // AHT20 sensor related
   for (int i = 0; i < AHT20_COUNT; i++)
   {
-    I2CMulti.selectPort(MUX_AHT20_FIRST + i);
     uint8_t status;
 
     DEBUG_PRINT("AHT20 ");
     DEBUG_PRINT(i);
     DEBUG_PRINT(" sensor initialization... ");
+
+    I2CMulti.selectPort(MUX_AHT20_FIRST + i);
     while ((status = aht20[i].begin()) != 0)
     {
       // logger.addMsg("AHT20 sensor initialization failed. error status : ");
@@ -88,6 +90,15 @@ void setup()
     // logger.log();
   }
 
+  // RTC related
+  DEBUG_PRINT("RTC initialization... ");
+
+  I2CMulti.selectPort(MUX_RTC);
+  rtc.setup();
+  // rtc.adjustRtc(F(__DATE__), F(__TIME__)); // Run once to set the RTC time
+
+  DEBUG_PRINTLN("done.");
+
   // logger.log();
 
   // Print header
@@ -102,7 +113,13 @@ void setup()
 void loop()
 {
   // logger.addMsg(String(millis()).c_str());
-  Serial.print(float(millis()) / 1000);
+  I2CMulti.selectPort(MUX_RTC);
+  char dateTimeString[20];
+  rtc.read();
+  sprintf(dateTimeString, "%04d-%02d-%02d %02d:%02d:%02d", 
+            rtc.year, rtc.month, rtc.day, rtc.hour, rtc.minute, rtc.second);
+  Serial.print(dateTimeString);
+
   Serial.print(", TODO");
 
   // AHT20 sensor related
