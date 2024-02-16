@@ -5,9 +5,25 @@
 #include <string.h>
 
 #define AHT20_COUNT 2
-#define TIME_BETWEEN_MEASUREMENTS 2000
 
+#define TIME_BETWEEN_MEASUREMENTS 2000
+#define TIME_BETWEEN_ERROR_RETRY 3000
+
+#define MUX_LCD 6
+#define MUX_AHT20_FIRST 0
+#define MUX_RTC 5
+
+///////////////
 #define DEBUG 1
+///////////////
+
+#if DEBUG
+#define DEBUG_PRINT(...) Serial.print(__VA_ARGS__)
+#define DEBUG_PRINTLN(...) Serial.println(__VA_ARGS__)
+#else
+#define DEBUG_PRINT(...)
+#define DEBUG_PRINTLN(...)
+#endif
 
 // Own code
 #include "src/sensor.h"
@@ -19,6 +35,7 @@ DFRobot_RGBLCD1602 lcd(0x2D, 16, 2);
 Logger logger(512);
 
 bool builtInLedState = false;
+char buffer[16];
 
 void setup()
 {
@@ -27,32 +44,43 @@ void setup()
 
   pinMode(LED_BUILTIN, OUTPUT);
 
+   // LCD related
+  DEBUG_PRINT("LCD initialization... ");
+
+  I2CMulti.selectPort(MUX_LCD);
+  lcd.init();
+  lcd.setRGB(20, 20, 20);
+
+  lcd.setCursor(0, 0);
+  lcd.print("Starting...");
+  lcd.setCursor(0, 1);
+  lcd.print("AHT20 sensors: ");
+  lcd.print(AHT20_COUNT);
+
+  DEBUG_PRINTLN("done.");
+
   // AHT20 sensor related
   for (int i = 0; i < AHT20_COUNT; i++)
   {
-    I2CMulti.selectPort(i);
+    I2CMulti.selectPort(MUX_AHT20_FIRST + i);
     uint8_t status;
+
+    DEBUG_PRINT("AHT20 ");
+    DEBUG_PRINT(i);
+    DEBUG_PRINT(" sensor initialization... ");
     while ((status = aht20[i].begin()) != 0)
     {
       // logger.addMsg("AHT20 sensor initialization failed. error status : ");
       // logger.addMsg(status);
       // logger.log();
-      if (DEBUG)
-      {
-        Serial.print("AHT20 ");
-        Serial.print(i);
-        Serial.print(" sensor initialization failed. error status: ");
-        Serial.println(status);
-      }
-      delay(3000);
+
+      DEBUG_PRINT("failed. error status: ");
+      DEBUG_PRINTLN(status);
+
+      delay(TIME_BETWEEN_ERROR_RETRY);
     }
 
-    if (DEBUG)
-    {
-      Serial.print("AHT20 ");
-      Serial.print(i);
-      Serial.println(" sensor initialization success");
-    }
+    DEBUG_PRINTLN("done.");
 
     // logger.addMsg("AHT20 ");
     // logger.addMsg(i);
@@ -60,36 +88,27 @@ void setup()
     // logger.log();
   }
 
-  // LCD related
-  I2CMulti.selectPort(6);
-  lcd.init();
-
-  if (DEBUG)
-  {
-    Serial.print("LCD initialization... ");
-
-    Serial.println("success");
-  }
   // logger.log();
 
-  // Print the header
+  // Print header
   Serial.println("Czas(s), Przeplyw(L/min), Temp(C)_1, Hum(%RH)_1, Temp(C)_2, Hum(%RH)_2");
   // logger.addMsg("Czas, Przeplyw(L/min), ");
   // logger.addMsg("Temperature(C)_1, Humidity(%RH)_1, ");
   // logger.addMsg("Temperature(C)_2, Humidity(%RH)_2");
   // logger.log();
+  delay(TIME_BETWEEN_MEASUREMENTS);
 }
 
 void loop()
 {
   // logger.addMsg(String(millis()).c_str());
-  Serial.print(float(millis() / 1000));
+  Serial.print(float(millis()) / 1000);
   Serial.print(", TODO");
 
   // AHT20 sensor related
   for (int i = 0; i < AHT20_COUNT; i++)
   {
-    I2CMulti.selectPort(i);
+    I2CMulti.selectPort(MUX_AHT20_FIRST + i);
     if (aht20[i].startMeasurementReady(true))
     {
       Serial.print(", ");
@@ -98,15 +117,14 @@ void loop()
       Serial.print(aht20[i].getHumidity_RH());
 
       // LCD related
-      I2CMulti.selectPort(6);
+      char tempStr[8], humStr[8];
+      dtostrf(aht20[i].getTemperature_C(), 4, 2, tempStr);
+      dtostrf(aht20[i].getHumidity_RH(), 4, 2, humStr);
+      sprintf(buffer, "S%d %sC %s%%", i, tempStr, humStr);
+
+      I2CMulti.selectPort(MUX_LCD);
       lcd.setCursor(0, i);
-      lcd.print("S");
-      lcd.print(i);
-      lcd.print(" ");
-      lcd.print(aht20[i].getTemperature_C());
-      lcd.print("C ");
-      lcd.print(aht20[i].getHumidity_RH());
-      lcd.print("%");
+      lcd.print(buffer);
       // logger.addMsg(", ");
       // logger.addMsg(String(aht20[i].getTemperature_C()).c_str());
       // logger.addMsg(", ");
