@@ -36,10 +36,10 @@ GravityRtc rtc;
 Logger logger(57600);
 
 bool builtInLedState = false;
-char buffer[16];
 
 void setup()
 {
+  // Builtin LED related
   pinMode(LED_BUILTIN, OUTPUT);
 
   // LCD related
@@ -92,6 +92,9 @@ void setup()
   // Print header
   logger.println("Czas(s), Przeplyw(L/min), Temp(C)_1, Hum(%RH)_1, Temp(C)_2, Hum(%RH)_2");
   delay(TIME_BETWEEN_MEASUREMENTS);
+
+  I2CMulti.selectPort(MUX_LCD);
+  lcd.clear();
 }
 
 void loop()
@@ -118,10 +121,10 @@ void loop()
       logger.print(aht20[i].getHumidity_RH());
 
       // LCD related
-      char tempStr[8], humStr[8];
-      dtostrf(aht20[i].getTemperature_C(), 4, 2, tempStr);
-      dtostrf(aht20[i].getHumidity_RH(), 4, 2, humStr);
-      sprintf(buffer, "S%d %sC %s%%", i, tempStr, humStr);
+      char tempStr[6], humStr[6], buffer[16];
+      dtostrf(aht20[i].getTemperature_C(), 3, 1, tempStr);
+      dtostrf(aht20[i].getHumidity_RH(), 3, 1, humStr);
+      sprintf(buffer, "%d: %sC %s%%", i, tempStr, humStr);
 
       I2CMulti.selectPort(MUX_LCD);
       lcd.setCursor(0, i);
@@ -129,11 +132,10 @@ void loop()
     }
   }
 
-  // builtin LED related
+  // Builtin LED related
   builtInLedState = !builtInLedState;
   digitalWrite(LED_BUILTIN, builtInLedState);
 
   logger.print("\n");
-  // logger.log();
   delay(TIME_BETWEEN_MEASUREMENTS);
 }
