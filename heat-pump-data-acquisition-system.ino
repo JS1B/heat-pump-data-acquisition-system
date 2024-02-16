@@ -19,31 +19,27 @@
 ///////////////
 
 #if DEBUG
-#define DEBUG_PRINT(...) Serial.print(__VA_ARGS__)
-#define DEBUG_PRINTLN(...) Serial.println(__VA_ARGS__)
+#define DEBUG_PRINT(...) logger.print(__VA_ARGS__)
+#define DEBUG_PRINTLN(...) logger.println(__VA_ARGS__)
 #else
 #define DEBUG_PRINT(...)
 #define DEBUG_PRINTLN(...)
 #endif
 
 // Own code
-#include "src/sensor.h"
-#include "src/logger.h"
+#include "src/Logger.h"
 
 DFRobot_I2C_Multiplexer I2CMulti(&Wire, 0x70);
 DFRobot_AHT20 aht20[AHT20_COUNT];
 DFRobot_RGBLCD1602 lcd(0x2D, 16, 2);
 GravityRtc rtc;
-Logger logger(512);
+Logger logger(57600);
 
 bool builtInLedState = false;
 char buffer[16];
 
 void setup()
 {
-  Serial.begin(57600);
-  // logger.begin(57600);
-
   pinMode(LED_BUILTIN, OUTPUT);
 
   // LCD related
@@ -60,6 +56,9 @@ void setup()
 
   DEBUG_PRINTLN("done.");
 
+  // Logger related
+  logger.begin();
+
   // AHT20 sensor related
   for (int i = 0; i < AHT20_COUNT; i++)
   {
@@ -72,10 +71,6 @@ void setup()
     I2CMulti.selectPort(MUX_AHT20_FIRST + i);
     while ((status = aht20[i].begin()) != 0)
     {
-      // logger.addMsg("AHT20 sensor initialization failed. error status : ");
-      // logger.addMsg(status);
-      // logger.log();
-
       DEBUG_PRINT("failed. error status: ");
       DEBUG_PRINTLN(status);
 
@@ -83,11 +78,6 @@ void setup()
     }
 
     DEBUG_PRINTLN("done.");
-
-    // logger.addMsg("AHT20 ");
-    // logger.addMsg(i);
-    // logger.addMsg(" sensor initialization success");
-    // logger.log();
   }
 
   // RTC related
@@ -99,28 +89,22 @@ void setup()
 
   DEBUG_PRINTLN("done.");
 
-  // logger.log();
-
   // Print header
-  Serial.println("Czas(s), Przeplyw(L/min), Temp(C)_1, Hum(%RH)_1, Temp(C)_2, Hum(%RH)_2");
-  // logger.addMsg("Czas, Przeplyw(L/min), ");
-  // logger.addMsg("Temperature(C)_1, Humidity(%RH)_1, ");
-  // logger.addMsg("Temperature(C)_2, Humidity(%RH)_2");
-  // logger.log();
+  logger.println("Czas(s), Przeplyw(L/min), Temp(C)_1, Hum(%RH)_1, Temp(C)_2, Hum(%RH)_2");
   delay(TIME_BETWEEN_MEASUREMENTS);
 }
 
 void loop()
 {
-  // logger.addMsg(String(millis()).c_str());
+  // RTC related
   I2CMulti.selectPort(MUX_RTC);
   char dateTimeString[20];
   rtc.read();
   sprintf(dateTimeString, "%04d-%02d-%02d %02d:%02d:%02d", 
             rtc.year, rtc.month, rtc.day, rtc.hour, rtc.minute, rtc.second);
-  Serial.print(dateTimeString);
+  logger.print(dateTimeString);
 
-  Serial.print(", TODO");
+  logger.print(", TODO");
 
   // AHT20 sensor related
   for (int i = 0; i < AHT20_COUNT; i++)
@@ -128,10 +112,10 @@ void loop()
     I2CMulti.selectPort(MUX_AHT20_FIRST + i);
     if (aht20[i].startMeasurementReady(true))
     {
-      Serial.print(", ");
-      Serial.print(aht20[i].getTemperature_C());
-      Serial.print(", ");
-      Serial.print(aht20[i].getHumidity_RH());
+      logger.print(", ");
+      logger.print(aht20[i].getTemperature_C());
+      logger.print(", ");
+      logger.print(aht20[i].getHumidity_RH());
 
       // LCD related
       char tempStr[8], humStr[8];
@@ -142,10 +126,6 @@ void loop()
       I2CMulti.selectPort(MUX_LCD);
       lcd.setCursor(0, i);
       lcd.print(buffer);
-      // logger.addMsg(", ");
-      // logger.addMsg(String(aht20[i].getTemperature_C()).c_str());
-      // logger.addMsg(", ");
-      // logger.addMsg(String(aht20[i].getHumidity_RH()).c_str());
     }
   }
 
@@ -153,7 +133,7 @@ void loop()
   builtInLedState = !builtInLedState;
   digitalWrite(LED_BUILTIN, builtInLedState);
 
-  Serial.println();
+  logger.print("\n");
   // logger.log();
   delay(TIME_BETWEEN_MEASUREMENTS);
 }
