@@ -143,19 +143,29 @@ void measure()
   logger.print(dateTimeString);
 
   // AHT20 sensor related
+  char tempStr[8], humStr[8], buffer[20];
   for (int i = 0; i < AHT20_COUNT; i++)
   {
     I2CMulti.selectPort(MUX_AHT20_FIRST + i);
     if (aht20[i].startMeasurementReady(true))
     {
-      logger.print(", ");
-      logger.print(aht20[i].getTemperature_C());
-      logger.print(", ");
-      logger.print(aht20[i].getHumidity_RH());
+      // Convert float to string with 2 decimal places
+      dtostrf(aht20[i].getTemperature_C(), 6, 2, tempStr);
+      dtostrf(aht20[i].getHumidity_RH(), 6, 2, humStr);
+
+      // Format the entire message into a buffer
+      sprintf(buffer, ", %s, %s", tempStr, humStr);
+      
+      logger.print(buffer);
+    }
+    else
+    {
+      logger.print(", ERROR, ERROR");
     }
   }
   logger.print("\n");
   display();
+  I2CMulti.selectPort(8); // Disable all channels
 }
 
 void display()
