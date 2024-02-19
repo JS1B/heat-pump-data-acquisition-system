@@ -7,15 +7,17 @@
 
 #define AHT20_COUNT 2
 
-#define TIME_BETWEEN_MEASUREMENTS 2000
+#define TIME_OF_SPLASH_SCREEN 3000
 #define TIME_BETWEEN_ERROR_RETRY 3000
+#define TIME_BETWEEN_LED_BLINK 1000
+#define TIME_BETWEEN_MEASUREMENTS 60000
 
 #define MUX_LCD 6
 #define MUX_AHT20_FIRST 0
 #define MUX_RTC 5
 
 ///////////////
-#define DEBUG 1
+#define DEBUG 0
 ///////////////
 
 #if DEBUG
@@ -28,6 +30,7 @@
 
 // Own code
 #include "src/Logger.h"
+#include "src/Scheduler.h"
 
 DFRobot_I2C_Multiplexer I2CMulti(&Wire, 0x70);
 DFRobot_AHT20 aht20[AHT20_COUNT];
@@ -37,10 +40,24 @@ Logger logger(57600);
 
 bool builtInLedState = false;
 
+unsigned long lastLedBlinkTime = 0;
+unsigned long lastMeasurementTime = TIME_BETWEEN_MEASUREMENTS;
+
+// Functions
+void blinkLed();
+void measure();
+void display();
+
+void setup();
+void loop();
+
 void setup()
 {
   // Builtin LED related
   pinMode(LED_BUILTIN, OUTPUT);
+
+  // Logger related
+  logger.begin();
 
   // LCD related
   DEBUG_PRINT("LCD initialization... ");
@@ -55,9 +72,6 @@ void setup()
   lcd.print(AHT20_COUNT);
 
   DEBUG_PRINTLN("done.");
-
-  // Logger related
-  logger.begin();
 
   // AHT20 sensor related
   for (int i = 0; i < AHT20_COUNT; i++)
@@ -90,8 +104,13 @@ void setup()
   DEBUG_PRINTLN("done.");
 
   // Print header
-  logger.println("Czas(s), Przeplyw(L/min), Temp(C)_1, Hum(%RH)_1, Temp(C)_2, Hum(%RH)_2");
-  delay(TIME_BETWEEN_MEASUREMENTS);
+  logger.print("Czas(s)");
+  for (int i = 0; i < AHT20_COUNT; i++)
+  {
+    logger.print(", Temp(C)_" + String(i + 1) + ", Hum(%RH)_" + String(i + 1));
+  }
+  logger.print("\n");
+  delay(TIME_OF_SPLASH_SCREEN);
 
   I2CMulti.selectPort(MUX_LCD);
   lcd.clear();
@@ -99,15 +118,24 @@ void setup()
 
 void loop()
 {
+  // Measurement related
+  scheduleOperation(lastMeasurementTime, TIME_BETWEEN_MEASUREMENTS, measure);
+
+  // Builtin LED related
+  scheduleOperation(lastLedBlinkTime, TIME_BETWEEN_LED_BLINK, blinkLed);
+}
+
+
+// Procedures
+void measure()
+{
   // RTC related
   I2CMulti.selectPort(MUX_RTC);
   char dateTimeString[20];
   rtc.read();
-  sprintf(dateTimeString, "%04d-%02d-%02d %02d:%02d:%02d", 
-            rtc.year, rtc.month, rtc.day, rtc.hour, rtc.minute, rtc.second);
+  sprintf(dateTimeString, "%04d-%02d-%02d %02d:%02d:%02d",
+          rtc.year, rtc.month, rtc.day, rtc.hour, rtc.minute, rtc.second);
   logger.print(dateTimeString);
-
-  logger.print(", TODO");
 
   // AHT20 sensor related
   for (int i = 0; i < AHT20_COUNT; i++)
@@ -119,23 +147,30 @@ void loop()
       logger.print(aht20[i].getTemperature_C());
       logger.print(", ");
       logger.print(aht20[i].getHumidity_RH());
-
-      // LCD related
-      char tempStr[6], humStr[6], buffer[16];
-      dtostrf(aht20[i].getTemperature_C(), 3, 1, tempStr);
-      dtostrf(aht20[i].getHumidity_RH(), 3, 1, humStr);
-      sprintf(buffer, "%d: %sC %s%%", i, tempStr, humStr);
-
-      I2CMulti.selectPort(MUX_LCD);
-      lcd.setCursor(0, i);
-      lcd.print(buffer);
     }
   }
+  logger.print("\n");
+  display();
+}
 
-  // Builtin LED related
+void display()
+{
+  for (int i = 0; i < AHT20_COUNT; i++)
+  {
+    I2CMulti.selectPort(MUX_AHT20_FIRST + i);
+    char tempStr[6], humStr[6], buffer[16];
+    dtostrf(aht20[i].getTemperature_C(), 3, 1, tempStr);
+    dtostrf(aht20[i].getHumidity_RH(), 3, 1, humStr);
+    sprintf(buffer, "%d: %sC %s%%", i, tempStr, humStr);
+
+    I2CMulti.selectPort(MUX_LCD);
+    lcd.setCursor(0, i);
+    lcd.print(buffer);
+  }
+}
+
+void blinkLed()
+{
   builtInLedState = !builtInLedState;
   digitalWrite(LED_BUILTIN, builtInLedState);
-
-  logger.print("\n");
-  delay(TIME_BETWEEN_MEASUREMENTS);
 }
