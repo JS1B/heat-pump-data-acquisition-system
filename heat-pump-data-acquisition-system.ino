@@ -7,6 +7,8 @@
 
 #define AHT20_COUNT 2
 
+// Constants
+#define TIME_OF_POWER_STABILIZATION 1000
 #define TIME_OF_SPLASH_SCREEN 3000
 #define TIME_BETWEEN_ERROR_RETRY 3000
 #define TIME_BETWEEN_LED_BLINK 1000
@@ -53,6 +55,9 @@ void loop();
 
 void setup()
 {
+  // Wait for power to stabilize
+  delay(TIME_OF_POWER_STABILIZATION);
+
   // Builtin LED related
   pinMode(LED_BUILTIN, OUTPUT);
 
@@ -65,6 +70,7 @@ void setup()
   I2CMulti.selectPort(MUX_LCD);
   lcd.init();
   lcd.setRGB(20, 20, 20);
+
   lcd.setCursor(0, 0);
   lcd.print("Starting...");
   lcd.setCursor(0, 1);
@@ -110,8 +116,8 @@ void setup()
     logger.print(", Temp(C)_" + String(i + 1) + ", Hum(%RH)_" + String(i + 1));
   }
   logger.print("\n");
-  delay(TIME_OF_SPLASH_SCREEN);
 
+  delay(TIME_OF_SPLASH_SCREEN);
   I2CMulti.selectPort(MUX_LCD);
   lcd.clear();
 }
@@ -124,7 +130,6 @@ void loop()
   // Builtin LED related
   scheduleOperation(lastLedBlinkTime, TIME_BETWEEN_LED_BLINK, blinkLed);
 }
-
 
 // Procedures
 void measure()
