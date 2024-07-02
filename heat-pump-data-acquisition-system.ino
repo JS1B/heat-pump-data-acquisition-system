@@ -8,11 +8,12 @@
 #define AHT20_COUNT 2
 
 // Constants
-#define TIME_OF_POWER_STABILIZATION 200
-#define TIME_OF_SPLASH_SCREEN 3000
+#define TIME_OF_POWER_STABILIZATION 400
+#define TIME_OF_SPLASH_SCREEN 2000
 #define TIME_BETWEEN_ERROR_RETRY 3000
 #define TIME_BETWEEN_LED_BLINK 1000
 #define TIME_BETWEEN_MEASUREMENTS 60000
+#define TIME_BETWEEN_LOGGER_SENDS TIME_BETWEEN_MEASUREMENTS
 
 #define MUX_LCD 6
 #define MUX_AHT20_FIRST 0
@@ -38,12 +39,18 @@ DFRobot_I2C_Multiplexer I2CMulti(&Wire, 0x70);
 DFRobot_AHT20 aht20[AHT20_COUNT];
 DFRobot_RGBLCD1602 lcd(0x2D, 16, 2);
 GravityRtc rtc;
+
+#if DEBUG
+Logger logger(57600, 512);
+#else
 Logger logger(57600);
+#endif
 
 bool builtInLedState = false;
 
 unsigned long lastLedBlinkTime = 0;
 unsigned long lastMeasurementTime = TIME_BETWEEN_MEASUREMENTS;
+unsigned long lastLoggerSendTime = TIME_BETWEEN_LOGGER_SENDS;
 
 // Functions
 void blinkLed();
@@ -113,7 +120,7 @@ void setup()
   logger.print("Czas(s)");
   for (int i = 0; i < AHT20_COUNT; i++)
   {
-    logger.print(", Temp(C)_" + String(i + 1) + ", Hum(%RH)_" + String(i + 1));
+    logger.print(String(", Temp(C)_" + String(i + 1) + ", Hum(%RH)_" + String(i + 1)).c_str());
   }
   logger.print("\n");
 
@@ -126,6 +133,9 @@ void loop()
 {
   // Measurement related
   scheduleOperation(lastMeasurementTime, TIME_BETWEEN_MEASUREMENTS, measure);
+
+  // Logger related
+  scheduleOperation(lastLoggerSendTime, TIME_BETWEEN_LOGGER_SENDS,  []() { logger.flush(); });
 
   // Builtin LED related
   scheduleOperation(lastLedBlinkTime, TIME_BETWEEN_LED_BLINK, blinkLed);

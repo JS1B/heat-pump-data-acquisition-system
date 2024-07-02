@@ -3,17 +3,18 @@
 
 class Logger {
 public:
-    Logger(long baudRate = 9600);
+    Logger(long baudRate = 9600, size_t bufferSize = 128);
+    ~Logger();
     void begin();
     
-    template <typename T>
-    void print(const T& message);
+    void print(const char* message);
+    void println(const char* message);
 
-    template <typename T>
-    void println(const T& message);
+    void flush(void);
 
 private:
     long baudRate;
+    char *buffer;
+    size_t bufferSize;
+    size_t bufferIndex;
 };
-
-#include "Logger.tpp"
