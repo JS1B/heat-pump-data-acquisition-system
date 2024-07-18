@@ -4,20 +4,24 @@
 #include <DFRobot_RGBLCD1602.h>
 #include <GravityRtc.h>
 #include <string.h>
+#include <math.h>
 
-#define AHT20_COUNT 2
+#define AHT20_COUNT 4
 
 // Constants
 #define TIME_OF_POWER_STABILIZATION 400
 #define TIME_OF_SPLASH_SCREEN 2000
-#define TIME_BETWEEN_ERROR_RETRY 3000
+#define TIME_BETWEEN_ERROR_RETRY 1200
 #define TIME_BETWEEN_LED_BLINK 1000
-#define TIME_BETWEEN_MEASUREMENTS 60000
+#define TIME_BETWEEN_MEASUREMENTS 1000
 #define TIME_BETWEEN_LOGGER_SENDS TIME_BETWEEN_MEASUREMENTS
+#define TIME_BETWEEN_LCD_CYCLES 3000
 
 #define MUX_LCD 6
 #define MUX_AHT20_FIRST 0
 #define MUX_RTC 5
+
+#define LCD_ROWS 2
 
 ///////////////
 #define DEBUG 0
@@ -51,11 +55,16 @@ bool builtInLedState = false;
 unsigned long lastLedBlinkTime = 0;
 unsigned long lastMeasurementTime = TIME_BETWEEN_MEASUREMENTS;
 unsigned long lastLoggerSendTime = TIME_BETWEEN_LOGGER_SENDS;
+unsigned long lastLcdCycleTime = 0;
+
+uint8_t lcdCycles = ceil(AHT20_COUNT / LCD_ROWS);
+uint8_t lcdCycleCurrent = 0;
 
 // Functions
 void blinkLed();
 void measure();
 void display();
+void updateCycle();
 
 void setup();
 void loop();
@@ -134,6 +143,9 @@ void loop()
   // Measurement related
   scheduleOperation(lastMeasurementTime, TIME_BETWEEN_MEASUREMENTS, measure);
 
+  // LCD related
+  scheduleOperation(lastLcdCycleTime, TIME_BETWEEN_LCD_CYCLES, updateCycle);
+
   // Logger related
   scheduleOperation(lastLoggerSendTime, TIME_BETWEEN_LOGGER_SENDS,  []() { logger.flush(); });
 
@@ -180,18 +192,28 @@ void measure()
 
 void display()
 {
-  for (int i = 0; i < AHT20_COUNT; i++)
+  I2CMulti.selectPort(MUX_LCD);
+  lcd.clear();
+  for (int i = 0; i < LCD_ROWS; i++)
   {
-    I2CMulti.selectPort(MUX_AHT20_FIRST + i);
+    uint8_t sensorIndex = lcdCycleCurrent * LCD_ROWS + i;
+    if (sensorIndex >= AHT20_COUNT) break;
+
+    I2CMulti.selectPort(MUX_AHT20_FIRST + sensorIndex);
     char tempStr[6], humStr[6], buffer[16];
-    dtostrf(aht20[i].getTemperature_C(), 3, 1, tempStr);
-    dtostrf(aht20[i].getHumidity_RH(), 3, 1, humStr);
-    sprintf(buffer, "%d: %sC %s%%", i, tempStr, humStr);
+    dtostrf(aht20[sensorIndex].getTemperature_C(), 3, 1, tempStr);
+    dtostrf(aht20[sensorIndex].getHumidity_RH(), 3, 1, humStr);
+    sprintf(buffer, "%d: %sC %s%%", sensorIndex, tempStr, humStr);
 
     I2CMulti.selectPort(MUX_LCD);
     lcd.setCursor(0, i);
     lcd.print(buffer);
   }
+}
+
+void updateCycle()
+{
+  lcdCycleCurrent = (lcdCycleCurrent + 1) % lcdCycles;
 }
 
 void blinkLed()
