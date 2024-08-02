@@ -34,42 +34,28 @@ void Logger::begin()
 #endif
 }
 
-void Logger::print(const char *message)
-{
+void Logger::print(const char *message) {
     size_t messageLength = strlen(message);
-    if (this->bufferIndex + messageLength < this->bufferSize)
-    {
+    if (this->bufferIndex + messageLength >= this->bufferSize) {
+        this->flush();
+    }
+
+    if (messageLength < this->bufferSize) {
         strcat(this->buffer + this->bufferIndex, message);
         this->bufferIndex += messageLength;
-    }
-    else
-    {
-        this->flush();
-        if (messageLength < this->bufferSize)
-        {
-            strcat(this->buffer + this->bufferIndex, message);
-            this->bufferIndex += messageLength;
-        }
     }
 }
 
 void Logger::println(const char *message)
 {
     this->print(message);
-    if (this->bufferIndex + 2 < this->bufferSize)
-    { // For newline and null terminator
-        strcat(this->buffer + this->bufferIndex, "\n");
-        this->bufferIndex += 1;
-    }
-    else
-    {
+    if (this->bufferIndex + 2 >= this->bufferSize) { 
+        // For newline and null terminator
         this->flush();
-        if (1 < this->bufferSize)
-        {
-            strcat(this->buffer + this->bufferIndex, "\n");
-            this->bufferIndex += 1;
-        }
     }
+   
+    strcat(this->buffer + this->bufferIndex, "\n");
+    this->bufferIndex += 1;
 }
 
 void Logger::flush(void)

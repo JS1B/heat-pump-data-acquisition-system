@@ -6,15 +6,14 @@
 #include <string.h>
 #include <math.h>
 
-#define AHT20_COUNT 4
+#define AHT20_COUNT 5
 
 // Constants
 #define TIME_OF_POWER_STABILIZATION 400
 #define TIME_OF_SPLASH_SCREEN 2000
 #define TIME_BETWEEN_ERROR_RETRY 1200
 #define TIME_BETWEEN_LED_BLINK 1000
-#define TIME_BETWEEN_MEASUREMENTS 1000
-#define TIME_BETWEEN_LOGGER_SENDS TIME_BETWEEN_MEASUREMENTS
+#define TIME_BETWEEN_MEASUREMENTS 1200000
 #define TIME_BETWEEN_LCD_CYCLES 3000
 
 #define MUX_LCD 6
@@ -28,8 +27,8 @@
 ///////////////
 
 #if DEBUG
-#define DEBUG_PRINT(...) logger.print(__VA_ARGS__)
-#define DEBUG_PRINTLN(...) logger.println(__VA_ARGS__)
+#define DEBUG_PRINT(...) logger.print(__VA_ARGS__); logger.flush()
+#define DEBUG_PRINTLN(...) logger.println(__VA_ARGS__); logger.flush()
 #else
 #define DEBUG_PRINT(...)
 #define DEBUG_PRINTLN(...)
@@ -45,7 +44,7 @@ DFRobot_RGBLCD1602 lcd(0x2D, 16, 2);
 GravityRtc rtc;
 
 #if DEBUG
-Logger logger(57600, 512);
+Logger logger(57600); // 256
 #else
 Logger logger(57600);
 #endif
@@ -54,10 +53,9 @@ bool builtInLedState = false;
 
 unsigned long lastLedBlinkTime = 0;
 unsigned long lastMeasurementTime = TIME_BETWEEN_MEASUREMENTS;
-unsigned long lastLoggerSendTime = TIME_BETWEEN_LOGGER_SENDS;
 unsigned long lastLcdCycleTime = 0;
 
-uint8_t lcdCycles = ceil(AHT20_COUNT / LCD_ROWS);
+const uint8_t lcdCycles = ceil((float)AHT20_COUNT / LCD_ROWS);
 uint8_t lcdCycleCurrent = 0;
 
 // Functions
@@ -69,10 +67,9 @@ void updateCycle();
 void setup();
 void loop();
 
-void setup()
-{
+void setup() {
   // Wait for power to stabilize
-  delay(TIME_OF_POWER_STABILIZATION);
+  delay(TIME_OF_POWER_STABILIZATION / 2);
 
   // Builtin LED related
   pinMode(LED_BUILTIN, OUTPUT);
@@ -80,11 +77,20 @@ void setup()
   // Logger related
   logger.begin();
 
+  DEBUG_PRINTLN("Starting...");
+
+  // I2C Multiplexer related
+  DEBUG_PRINT("I2C Multiplexer initialization... ");
+  I2CMulti.begin();
+
+  DEBUG_PRINTLN("done.");
+
   // LCD related
   DEBUG_PRINT("LCD initialization... ");
 
   I2CMulti.selectPort(MUX_LCD);
   lcd.init();
+  delay(TIME_OF_POWER_STABILIZATION / 2);
   lcd.setRGB(20, 20, 20);
 
   lcd.setCursor(0, 0);
@@ -96,8 +102,7 @@ void setup()
   DEBUG_PRINTLN("done.");
 
   // AHT20 sensor related
-  for (int i = 0; i < AHT20_COUNT; i++)
-  {
+  for (int i = 0; i < AHT20_COUNT; i++) {
     uint8_t status;
 
     DEBUG_PRINT("AHT20 ");
@@ -105,8 +110,7 @@ void setup()
     DEBUG_PRINT(" sensor initialization... ");
 
     I2CMulti.selectPort(MUX_AHT20_FIRST + i);
-    while ((status = aht20[i].begin()) != 0)
-    {
+    while ((status = aht20[i].begin()) != 0) {
       DEBUG_PRINT("failed. error status: ");
       DEBUG_PRINTLN(status);
 
@@ -127,35 +131,32 @@ void setup()
 
   // Print header
   logger.print("Czas(s)");
-  for (int i = 0; i < AHT20_COUNT; i++)
-  {
+  for (int i = 0; i < AHT20_COUNT; i++) {
     logger.print(String(", Temp(C)_" + String(i + 1) + ", Hum(%RH)_" + String(i + 1)).c_str());
   }
-  logger.print("\n");
+  logger.println("");
+  logger.flush();
 
   delay(TIME_OF_SPLASH_SCREEN);
   I2CMulti.selectPort(MUX_LCD);
   lcd.clear();
+
+  I2CMulti.selectPort(8); // Disable all channels
 }
 
-void loop()
-{
+void loop() {
   // Measurement related
   scheduleOperation(lastMeasurementTime, TIME_BETWEEN_MEASUREMENTS, measure);
 
   // LCD related
   scheduleOperation(lastLcdCycleTime, TIME_BETWEEN_LCD_CYCLES, updateCycle);
 
-  // Logger related
-  scheduleOperation(lastLoggerSendTime, TIME_BETWEEN_LOGGER_SENDS,  []() { logger.flush(); });
-
   // Builtin LED related
   scheduleOperation(lastLedBlinkTime, TIME_BETWEEN_LED_BLINK, blinkLed);
 }
 
 // Procedures
-void measure()
-{
+void measure() {
   // RTC related
   I2CMulti.selectPort(MUX_RTC);
   char dateTimeString[20];
@@ -166,11 +167,10 @@ void measure()
 
   // AHT20 sensor related
   char tempStr[8], humStr[8], buffer[20];
-  for (int i = 0; i < AHT20_COUNT; i++)
-  {
+  for (int i = 0; i < AHT20_COUNT; i++) {
     I2CMulti.selectPort(MUX_AHT20_FIRST + i);
-    if (aht20[i].startMeasurementReady(true))
-    {
+
+    if (aht20[i].startMeasurementReady(true)) {
       // Convert float to string with 2 decimal places
       dtostrf(aht20[i].getTemperature_C(), 6, 2, tempStr);
       dtostrf(aht20[i].getHumidity_RH(), 6, 2, humStr);
@@ -180,22 +180,22 @@ void measure()
       
       logger.print(buffer);
     }
-    else
-    {
+    else {
       logger.print(", ERROR, ERROR");
     }
   }
   logger.print("\n");
+  logger.flush();
+
   display();
   I2CMulti.selectPort(8); // Disable all channels
 }
 
-void display()
-{
+void display() {
   I2CMulti.selectPort(MUX_LCD);
   lcd.clear();
-  for (int i = 0; i < LCD_ROWS; i++)
-  {
+
+  for (int i = 0; i < LCD_ROWS; i++) {
     uint8_t sensorIndex = lcdCycleCurrent * LCD_ROWS + i;
     if (sensorIndex >= AHT20_COUNT) break;
 
@@ -209,15 +209,17 @@ void display()
     lcd.setCursor(0, i);
     lcd.print(buffer);
   }
+  I2CMulti.selectPort(8); // Disable all channels
 }
 
-void updateCycle()
-{
+void updateCycle() {
+  if (lcdCycles <= 1) return;
+
   lcdCycleCurrent = (lcdCycleCurrent + 1) % lcdCycles;
 }
 
-void blinkLed()
-{
+void blinkLed() {
+  // DEBUG_PRINTLN("Blinking LED");
   builtInLedState = !builtInLedState;
   digitalWrite(LED_BUILTIN, builtInLedState);
 }
