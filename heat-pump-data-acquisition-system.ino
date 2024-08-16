@@ -146,10 +146,10 @@ void setup() {
 
 void loop() {
   // Measurement related
-  scheduleOperation(lastMeasurementTime, TIME_BETWEEN_MEASUREMENTS, measure);
+  scheduleOperation(lastMeasurementTime, TIME_BETWEEN_MEASUREMENTS, []() {measure(); display();});
 
   // LCD related
-  scheduleOperation(lastLcdCycleTime, TIME_BETWEEN_LCD_CYCLES, updateCycle);
+  scheduleOperation(lastLcdCycleTime, TIME_BETWEEN_LCD_CYCLES, []() {updateCycle(); display();});
 
   // Builtin LED related
   scheduleOperation(lastLedBlinkTime, TIME_BETWEEN_LED_BLINK, blinkLed);
@@ -187,7 +187,6 @@ void measure() {
   logger.print("\n");
   logger.flush();
 
-  display();
   I2CMulti.selectPort(8); // Disable all channels
 }
 
